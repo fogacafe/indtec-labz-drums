@@ -88,7 +88,7 @@ export function App() {
           Import MusicXML
           <input
             type="file"
-            accept=".xml,.musicxml,.mxl,application/vnd.recordare.musicxml+xml"
+            accept=".xml,.musicxml,application/vnd.recordare.musicxml+xml"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void importXml(file);
