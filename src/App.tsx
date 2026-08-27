@@ -6,6 +6,15 @@ import type { Chart, PracticeLoop } from './domain/chart';
 import { parseMusicXml } from './musicxml/parseMusicXml';
 
 const SPEED_OPTIONS = [50, 60, 75, 90, 100];
+type AudioStatus = 'idle' | AudioContextState | 'unsupported' | 'error';
+
+type SafariAudioNavigator = Navigator & {
+  audioSession?: { type: string };
+};
+
+type SafariAudioWindow = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
+};
 
 export function App() {
   const [xml, setXml] = useState<string | null>(null);
@@ -17,6 +26,7 @@ export function App() {
   const [loadingDemo, setLoadingDemo] = useState(false);
   const [speedPercent, setSpeedPercent] = useState(100);
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
+  const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
   const startedAtRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -58,11 +68,31 @@ export function App() {
   }
 
   async function ensureAudioContext() {
-    if (!audioContextRef.current) audioContextRef.current = new AudioContext();
+    try {
+      const safariNavigator = navigator as SafariAudioNavigator;
+      if (safariNavigator.audioSession) safariNavigator.audioSession.type = 'playback';
 
-    const context = audioContextRef.current;
-    if (context.state !== 'running') await context.resume();
-    return context;
+      if (!audioContextRef.current) {
+        const safariWindow = window as SafariAudioWindow;
+        const AudioContextClass = window.AudioContext ?? safariWindow.webkitAudioContext;
+        if (!AudioContextClass) {
+          setAudioStatus('unsupported');
+          throw new Error('Web Audio is not supported in this browser.');
+        }
+
+        const context = new AudioContextClass();
+        context.onstatechange = () => setAudioStatus(context.state);
+        audioContextRef.current = context;
+      }
+
+      const context = audioContextRef.current;
+      if (context.state !== 'running') await context.resume();
+      setAudioStatus(context.state);
+      return context;
+    } catch (reason) {
+      setAudioStatus('error');
+      throw reason;
+    }
   }
 
   function scheduleMetronomeClick(context: AudioContext, time: number, accent: boolean) {
@@ -70,22 +100,34 @@ export function App() {
     const gain = context.createGain();
 
     oscillator.type = 'square';
-    oscillator.frequency.setValueAtTime(accent ? 1500 : 950, time);
-    gain.gain.setValueAtTime(accent ? 0.32 : 0.2, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+    oscillator.frequency.setValueAtTime(accent ? 1700 : 1050, time);
+    gain.gain.setValueAtTime(accent ? 0.5 : 0.3, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.075);
 
     oscillator.connect(gain);
     gain.connect(context.destination);
     oscillator.start(time);
-    oscillator.stop(time + 0.065);
+    oscillator.stop(time + 0.08);
+  }
+
+  async function testMetronomeClick() {
+    try {
+      const context = await ensureAudioContext();
+      scheduleMetronomeClick(context, context.currentTime, true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not start audio.');
+    }
   }
 
   async function togglePlaying() {
     if (!chart) return;
 
     if (!playing && metronomeEnabled) {
-      const context = await ensureAudioContext();
-      scheduleMetronomeClick(context, context.currentTime + 0.01, true);
+      try {
+        await ensureAudioContext();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not start audio.');
+      }
     }
 
     setPlaying((value) => !value);
@@ -93,11 +135,13 @@ export function App() {
 
   async function toggleMetronome() {
     if (!metronomeEnabled) {
-      const context = await ensureAudioContext();
-      // The immediate click is intentional: Safari/iOS only reliably unlocks Web Audio
-      // when actual audio is produced from the user's gesture.
-      scheduleMetronomeClick(context, context.currentTime + 0.01, true);
-      setMetronomeEnabled(true);
+      try {
+        const context = await ensureAudioContext();
+        scheduleMetronomeClick(context, context.currentTime, true);
+        setMetronomeEnabled(true);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not start audio.');
+      }
       return;
     }
 
@@ -180,7 +224,9 @@ export function App() {
   useEffect(() => {
     const resumeAudio = () => {
       const context = audioContextRef.current;
-      if (metronomeEnabled && context && context.state !== 'running') void context.resume();
+      if (metronomeEnabled && context && context.state !== 'running') {
+        void context.resume().then(() => setAudioStatus(context.state));
+      }
     };
 
     document.addEventListener('visibilitychange', resumeAudio);
@@ -250,14 +296,20 @@ export function App() {
           </div>
         </div>
 
-        <button
-          type="button"
-          className={`metronome-toggle ${metronomeEnabled ? 'active' : ''}`}
-          onClick={() => void toggleMetronome()}
-        >
-          <span>Metronome</span>
-          <strong>{metronomeEnabled ? 'On' : 'Off'}</strong>
-        </button>
+        <div className="metronome-control">
+          <button
+            type="button"
+            className={`metronome-toggle ${metronomeEnabled ? 'active' : ''}`}
+            onClick={() => void toggleMetronome()}
+          >
+            <span>Metronome</span>
+            <strong>{metronomeEnabled ? 'On' : 'Off'}</strong>
+          </button>
+          <button type="button" className="audio-test" onClick={() => void testMetronomeClick()}>
+            Test click
+          </button>
+          <small>Audio: {audioStatus}</small>
+        </div>
       </section>
 
       <section className="transport">
