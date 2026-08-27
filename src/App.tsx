@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { MidiMonitor } from './components/MidiMonitor';
 import { PracticeTimeline } from './components/PracticeTimeline';
 import { ScoreViewer } from './components/ScoreViewer';
 import type { Chart, PracticeLoop } from './domain/chart';
@@ -81,7 +82,7 @@ export function App() {
         <div>
           <span className="eyebrow">INDTEC LABZ / DRUMS</span>
           <h1>MusicXML practice playground</h1>
-          <p>Import a drum score, render it in the browser and rehearse a selected measure range on a simple timeline.</p>
+          <p>Import a drum score, connect an electronic kit over Web MIDI and rehearse selected measures directly in the browser.</p>
         </div>
 
         <label className="import-button">
@@ -98,6 +99,8 @@ export function App() {
       </header>
 
       {error && <div className="error">{error}</div>}
+
+      <MidiMonitor />
 
       <section className="meta-card">
         <div><span>Exercise</span><strong>{chart?.title ?? 'No chart loaded'}</strong></div>
