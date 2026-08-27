@@ -151,6 +151,7 @@ export function App() {
           xml={xml}
           currentBeat={currentBeat}
           totalBeats={chart?.totalBeats ?? 0}
+          beatsPerMeasure={chart?.beatsPerMeasure ?? 4}
           playing={playing}
         />
       </section>
