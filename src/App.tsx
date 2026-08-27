@@ -46,6 +46,15 @@ export function App() {
     setFeedback({ kind, label, detail: `${target.instrument} · ${Math.round(Math.abs(deltaMs))}ms`, id: feedbackIdRef.current });
   }
 
+  function seekToBeat(beat: number) {
+    if (!chart) return;
+    const nextBeat = Math.min(Math.max(beat, 0), chart.totalBeats);
+    setCurrentBeat(nextBeat);
+    startedAtRef.current = performance.now() - nextBeat * beatDurationMs;
+    matchedHitsRef.current.clear();
+    setFeedback(null);
+  }
+
   async function togglePlaying() { if (!chart) return; if (!playing) { if (!loop && currentBeat >= chart.totalBeats - 0.001) { setCurrentBeat(0); startedAtRef.current = null; resetPerformance(); } if (metronomeEnabled) { try { await ensureAudioContext(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not start audio.'); } } } setPlaying((value) => !value); }
   async function toggleMetronome() { if (!metronomeEnabled) { try { const context = await ensureAudioContext(); scheduleMetronomeClick(context, context.currentTime, true); setMetronomeEnabled(true); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not start audio.'); } return; } setMetronomeEnabled(false); }
   function selectMeasure(measure: number) { setLoop((current) => { if (!current || current.startMeasure !== current.endMeasure) return { startMeasure: measure, endMeasure: measure }; return { startMeasure: Math.min(current.startMeasure, measure), endMeasure: Math.max(current.startMeasure, measure) }; }); }
@@ -62,7 +71,7 @@ export function App() {
     {error && <div className="error">{error}</div>}
     <section className={`practice-stage ${playing ? 'is-playing' : ''} ${feedback ? `feedback-${feedback.kind}` : ''}`} style={{ '--beat-duration': `${beatDurationMs}ms` } as React.CSSProperties}>
       <div className="stage-glow" key={`${Math.floor(currentBeat)}-${playing}`} /><div className="stage-topline"><div className="tempo-readout"><span>TEMPO</span><strong>{chart ? Math.round(effectiveBpm) : '—'}</strong><small>BPM</small></div><div className="beat-dots">{Array.from({ length: chart?.beatsPerMeasure ?? 4 }, (_, index) => <i key={index} className={chart && index === beatInMeasure ? 'active' : ''} />)}</div><div className="loop-readout"><span>LOOP</span><strong>{loop ? `${loop.startMeasure}—${loop.endMeasure}` : replayEnabled ? 'Replay chart' : 'Full chart'}</strong></div></div>
-      <div className="score-stage"><ScoreViewer xml={xml} currentBeat={currentBeat} totalBeats={chart?.totalBeats ?? 0} beatsPerMeasure={chart?.beatsPerMeasure ?? 4} playing={playing} />{feedback && <div key={feedback.id} className={`hit-feedback ${feedback.kind}`}><strong>{feedback.label}</strong><span>{feedback.detail}</span></div>}</div>
+      <div className="score-stage"><ScoreViewer xml={xml} currentBeat={currentBeat} totalBeats={chart?.totalBeats ?? 0} beatsPerMeasure={chart?.beatsPerMeasure ?? 4} playing={playing} onSeek={seekToBeat} />{feedback && <div key={feedback.id} className={`hit-feedback ${feedback.kind}`}><strong>{feedback.label}</strong><span>{feedback.detail}</span></div>}</div>
       <div className="stage-status"><span className={playing ? 'live-dot active' : 'live-dot'} />{playing ? 'LISTENING TO YOUR KIT' : chart ? 'READY' : 'LOAD A SCORE'}</div>
     </section>
     <section className="control-deck"><div className="transport-main"><button className="restart-button" type="button" disabled={!chart} onClick={() => { setPlaying(false); setCurrentBeat(0); resetPerformance(); }}>↺</button><button className="play-button" type="button" disabled={!chart} onClick={() => void togglePlaying()}>{playing ? 'Ⅱ' : '▶'}<span>{playing ? 'Pause' : 'Play'}</span></button><button className={`metro-button ${metronomeEnabled ? 'active' : ''}`} type="button" onClick={() => void toggleMetronome()}><span>♩</span><div><small>METRONOME</small><strong>{metronomeEnabled ? 'ON' : 'OFF'}</strong></div></button><button className={`replay-button ${replayEnabled ? 'active' : ''}`} type="button" onClick={() => setReplayEnabled((value) => !value)}><span>↻</span><div><small>REPLAY</small><strong>{replayEnabled ? 'ON' : 'OFF'}</strong></div></button></div><div className="speed-strip"><span>PRACTICE SPEED</span><div>{SPEED_OPTIONS.map((speed) => <button key={speed} type="button" className={speedPercent === speed ? 'active' : ''} onClick={() => setSpeedPercent(speed)}>{speed}%</button>)}</div></div><div className="audio-state">Audio {audioStatus}</div></section>
