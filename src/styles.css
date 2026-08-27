@@ -25,12 +25,22 @@ button { cursor: pointer; }
 .transport button:hover:not(:disabled), .import-button:hover, .demo-button:hover:not(:disabled) { transform: translateY(-1px); }
 .transport button:disabled { opacity: .35; cursor: not-allowed; }
 
-.meta-card, .timeline, .score-card, .transport { border: 1px solid #222c35; background: rgba(15, 19, 24, .86); border-radius: 18px; }
+.meta-card, .timeline, .score-card, .transport, .practice-controls { border: 1px solid #222c35; background: rgba(15, 19, 24, .86); border-radius: 18px; }
 .meta-card { display: grid; grid-template-columns: 2fr repeat(3, 1fr); overflow: hidden; margin-bottom: 14px; }
 .meta-card > div { padding: 18px 20px; border-right: 1px solid #222c35; }
 .meta-card > div:last-child { border-right: 0; }
 .meta-card span { display: block; color: #6f7d89; text-transform: uppercase; font-size: .68rem; letter-spacing: .12em; margin-bottom: 6px; }
 .meta-card strong { font-size: .95rem; }
+
+.practice-controls { display: grid; grid-template-columns: 1fr auto; gap: 14px; padding: 14px; margin-bottom: 14px; }
+.speed-control { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 0; }
+.control-copy span, .metronome-toggle span { display: block; color: #71808d; text-transform: uppercase; font-size: .66rem; letter-spacing: .12em; margin-bottom: 5px; }
+.control-copy strong, .metronome-toggle strong { font-size: .92rem; }
+.speed-options { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+.speed-options button, .metronome-toggle { border: 1px solid #2b3742; background: #11171d; color: #aab5bf; border-radius: 10px; padding: 9px 11px; }
+.speed-options button.active, .metronome-toggle.active { background: rgba(137, 240, 178, .12); border-color: rgba(137, 240, 178, .45); color: #a7f4c5; }
+.metronome-toggle { min-width: 132px; text-align: left; transition: .18s ease; }
+.metronome-toggle:hover { transform: translateY(-1px); }
 
 .transport { display: flex; align-items: center; gap: 10px; padding: 12px; margin-bottom: 14px; }
 .transport span { margin-left: auto; color: #8e9aa5; font-size: .9rem; }
@@ -67,6 +77,11 @@ button { cursor: pointer; }
   .hero-actions > * { flex: 1; justify-content: center; }
   .meta-card { grid-template-columns: 1fr 1fr; }
   .meta-card > div { border-bottom: 1px solid #222c35; }
+  .practice-controls { grid-template-columns: 1fr; }
+  .speed-control { align-items: flex-start; flex-direction: column; }
+  .speed-options { width: 100%; justify-content: flex-start; }
+  .speed-options button { flex: 1; }
+  .metronome-toggle { width: 100%; }
   .transport { flex-wrap: wrap; }
   .transport span { width: 100%; margin: 4px 0 0; }
   .score-card { padding: 12px; }
