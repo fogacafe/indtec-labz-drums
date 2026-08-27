@@ -47,14 +47,17 @@ button { cursor: pointer; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #f4f7fa; box-shadow: 0 0 14px rgba(255,255,255,.4); z-index: 3; pointer-events: none; }
 .timeline-hint { margin-top: 10px; color: #66727d; font-size: .8rem; }
 
-.score-card { min-height: 360px; padding: 18px; overflow: hidden; }
-.score-practice { position: relative; min-height: 320px; border-radius: 12px; overflow: hidden; background: #fff; }
-.score-viewport { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+.score-card { min-height: 260px; padding: 18px; overflow: hidden; }
+.score-practice { position: relative; min-height: 220px; border-radius: 12px; overflow: hidden; background: #fff; }
+.score-viewport { min-height: 220px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
 .score-viewport::-webkit-scrollbar { display: none; }
-.score { min-width: 1500px; background: #fff; border-radius: 10px; padding: 16px 240px 16px 120px; }
+.score-track { display: flex; align-items: flex-start; width: max-content; min-width: 100%; background: #fff; }
+.score-spacer { flex: 0 0 auto; min-height: 220px; background: #fff; }
+.score { flex: 0 0 auto; min-height: 220px; background: #fff; padding: 18px 0; }
+.score svg { display: block; }
 .score-now { position: absolute; left: 35%; top: 0; bottom: 0; width: 2px; z-index: 8; pointer-events: none; background: rgba(11, 13, 16, .78); box-shadow: 0 0 18px rgba(11, 13, 16, .25); }
 .score-now span { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: #0b0d10; color: #89f0b2; border-radius: 999px; padding: 4px 8px; font-size: .62rem; font-weight: 900; letter-spacing: .14em; }
-.empty-score { min-height: 320px; display: grid; place-items: center; color: #66727d; }
+.empty-score { min-height: 220px; display: grid; place-items: center; color: #66727d; }
 .error { margin-bottom: 14px; border: 1px solid #6a3434; background: #261515; color: #ffb7b7; border-radius: 10px; padding: 12px 14px; }
 
 @media (max-width: 760px) {
@@ -66,6 +69,6 @@ button { cursor: pointer; }
   .meta-card > div { border-bottom: 1px solid #222c35; }
   .transport { flex-wrap: wrap; }
   .transport span { width: 100%; margin: 4px 0 0; }
-  .score-now { left: 28%; }
-  .score { min-width: 1300px; padding-left: 80px; }
+  .score-card { padding: 12px; }
+  .score-practice, .score-viewport, .score-spacer, .score { min-height: 190px; }
 }
