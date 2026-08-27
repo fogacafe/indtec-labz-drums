@@ -110,23 +110,21 @@ export function App() {
     oscillator.stop(time + 0.08);
   }
 
-  async function testMetronomeClick() {
-    try {
-      const context = await ensureAudioContext();
-      scheduleMetronomeClick(context, context.currentTime, true);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not start audio.');
-    }
-  }
-
   async function togglePlaying() {
     if (!chart) return;
 
-    if (!playing && metronomeEnabled) {
-      try {
-        await ensureAudioContext();
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : 'Could not start audio.');
+    if (!playing) {
+      if (!loop && currentBeat >= chart.totalBeats - 0.001) {
+        setCurrentBeat(0);
+        startedAtRef.current = null;
+      }
+
+      if (metronomeEnabled) {
+        try {
+          await ensureAudioContext();
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : 'Could not start audio.');
+        }
       }
     }
 
@@ -304,9 +302,6 @@ export function App() {
           >
             <span>Metronome</span>
             <strong>{metronomeEnabled ? 'On' : 'Off'}</strong>
-          </button>
-          <button type="button" className="audio-test" onClick={() => void testMetronomeClick()}>
-            Test click
           </button>
           <small>Audio: {audioStatus}</small>
         </div>
