@@ -5,6 +5,8 @@ import { ScoreViewer } from './components/ScoreViewer';
 import type { Chart, PracticeLoop } from './domain/chart';
 import { parseMusicXml } from './musicxml/parseMusicXml';
 
+const SPEED_OPTIONS = [50, 60, 75, 90, 100];
+
 export function App() {
   const [xml, setXml] = useState<string | null>(null);
   const [chart, setChart] = useState<Chart | null>(null);
@@ -13,9 +15,16 @@ export function App() {
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingDemo, setLoadingDemo] = useState(false);
+  const [speedPercent, setSpeedPercent] = useState(100);
+  const [metronomeEnabled, setMetronomeEnabled] = useState(false);
   const startedAtRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
-  const beatDurationMs = useMemo(() => (chart ? 60_000 / chart.bpm : 500), [chart]);
+  const effectiveBpm = useMemo(
+    () => (chart ? chart.bpm * (speedPercent / 100) : 120),
+    [chart, speedPercent],
+  );
+  const beatDurationMs = useMemo(() => 60_000 / effectiveBpm, [effectiveBpm]);
 
   function loadXml(content: string) {
     const nextChart = parseMusicXml(content);
@@ -46,6 +55,24 @@ export function App() {
     } finally {
       setLoadingDemo(false);
     }
+  }
+
+  async function ensureAudioContext() {
+    const AudioContextClass = window.AudioContext;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
+    if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+    return audioContextRef.current;
+  }
+
+  async function togglePlaying() {
+    if (!chart) return;
+    if (!playing && metronomeEnabled) await ensureAudioContext();
+    setPlaying((value) => !value);
+  }
+
+  async function toggleMetronome() {
+    if (!metronomeEnabled) await ensureAudioContext();
+    setMetronomeEnabled((value) => !value);
   }
 
   function selectMeasure(measure: number) {
@@ -93,6 +120,46 @@ export function App() {
     return () => cancelAnimationFrame(frame);
   }, [playing, chart, loop, beatDurationMs]);
 
+  useEffect(() => {
+    if (!playing || !metronomeEnabled || !chart) return;
+
+    const context = audioContextRef.current;
+    if (!context) return;
+
+    const beatDurationSeconds = 60 / effectiveBpm;
+    const lookAheadSeconds = 0.1;
+    const schedulerIntervalMs = 25;
+    const currentWholeBeat = Math.ceil(currentBeat - 0.0001);
+    const fractionToNextBeat = Math.max(currentWholeBeat - currentBeat, 0);
+    let nextBeat = currentWholeBeat;
+    let nextClickAt = context.currentTime + fractionToNextBeat * beatDurationSeconds;
+
+    const scheduleClick = (time: number, beat: number) => {
+      const accent = beat % chart.beatsPerMeasure === 0;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+
+      oscillator.frequency.setValueAtTime(accent ? 1200 : 850, time);
+      gain.gain.setValueAtTime(accent ? 0.16 : 0.09, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.045);
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(time);
+      oscillator.stop(time + 0.05);
+    };
+
+    const scheduler = window.setInterval(() => {
+      while (nextClickAt < context.currentTime + lookAheadSeconds) {
+        scheduleClick(nextClickAt, nextBeat);
+        nextBeat += 1;
+        nextClickAt += beatDurationSeconds;
+      }
+    }, schedulerIntervalMs);
+
+    return () => window.clearInterval(scheduler);
+  }, [playing, metronomeEnabled, chart, effectiveBpm]);
+
   return (
     <main className="shell">
       <header className="hero">
@@ -126,13 +193,43 @@ export function App() {
 
       <section className="meta-card">
         <div><span>Exercise</span><strong>{chart?.title ?? 'No chart loaded'}</strong></div>
-        <div><span>Tempo</span><strong>{chart ? `${chart.bpm} BPM` : '—'}</strong></div>
+        <div><span>Tempo</span><strong>{chart ? `${Math.round(effectiveBpm)} BPM` : '—'}</strong></div>
         <div><span>Signature</span><strong>{chart ? `${chart.beatsPerMeasure}/${chart.beatType}` : '—'}</strong></div>
         <div><span>Measures</span><strong>{chart?.measures.length ?? '—'}</strong></div>
       </section>
 
+      <section className="practice-controls">
+        <div className="speed-control">
+          <div className="control-copy">
+            <span>Practice speed</span>
+            <strong>{speedPercent}%{chart ? ` · ${Math.round(effectiveBpm)} BPM` : ''}</strong>
+          </div>
+          <div className="speed-options">
+            {SPEED_OPTIONS.map((speed) => (
+              <button
+                key={speed}
+                type="button"
+                className={speedPercent === speed ? 'active' : ''}
+                onClick={() => setSpeedPercent(speed)}
+              >
+                {speed}%
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className={`metronome-toggle ${metronomeEnabled ? 'active' : ''}`}
+          onClick={() => void toggleMetronome()}
+        >
+          <span>Metronome</span>
+          <strong>{metronomeEnabled ? 'On' : 'Off'}</strong>
+        </button>
+      </section>
+
       <section className="transport">
-        <button type="button" disabled={!chart} onClick={() => setPlaying((value) => !value)}>
+        <button type="button" disabled={!chart} onClick={() => void togglePlaying()}>
           {playing ? 'Pause' : 'Play'}
         </button>
         <button type="button" disabled={!chart} onClick={() => { setPlaying(false); setCurrentBeat(0); }}>
