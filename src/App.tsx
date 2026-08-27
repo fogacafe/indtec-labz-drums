@@ -17,7 +17,7 @@ export function App() {
 
   const beatDurationMs = useMemo(() => (chart ? 60_000 / chart.bpm : 500), [chart]);
 
-  function loadXmlContent(content: string) {
+  function loadXml(content: string) {
     const nextChart = parseMusicXml(content);
     setXml(content);
     setChart(nextChart);
@@ -29,20 +29,20 @@ export function App() {
 
   async function importXml(file: File) {
     try {
-      loadXmlContent(await file.text());
+      loadXml(await file.text());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not import MusicXML.');
     }
   }
 
   async function loadDemo() {
+    setLoadingDemo(true);
     try {
-      setLoadingDemo(true);
       const response = await fetch(`${import.meta.env.BASE_URL}demo-groove.musicxml`);
       if (!response.ok) throw new Error('Could not load the demo groove.');
-      loadXmlContent(await response.text());
+      loadXml(await response.text());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load the demo groove.');
+      setError(reason instanceof Error ? reason.message : 'Could not load demo.');
     } finally {
       setLoadingDemo(false);
     }
@@ -103,7 +103,7 @@ export function App() {
         </div>
 
         <div className="hero-actions">
-          <button className="demo-button" type="button" onClick={() => void loadDemo()} disabled={loadingDemo}>
+          <button className="demo-button" type="button" disabled={loadingDemo} onClick={() => void loadDemo()}>
             {loadingDemo ? 'Loading…' : 'Load demo'}
           </button>
           <label className="import-button">
@@ -147,7 +147,12 @@ export function App() {
       <PracticeTimeline chart={chart} currentBeat={currentBeat} loop={loop} onSelectMeasure={selectMeasure} />
 
       <section className="score-card">
-        <ScoreViewer xml={xml} />
+        <ScoreViewer
+          xml={xml}
+          currentBeat={currentBeat}
+          totalBeats={chart?.totalBeats ?? 0}
+          playing={playing}
+        />
       </section>
     </main>
   );
