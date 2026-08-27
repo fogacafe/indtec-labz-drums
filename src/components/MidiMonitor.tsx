@@ -6,8 +6,10 @@ export function MidiMonitor() {
   const [lastHit, setLastHit] = useState<DrumHit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const disconnectRef = useRef<(() => void) | null>(null);
   const supported = isWebMidiSupported();
+  const connected = devices.length > 0;
 
   async function handleConnect() {
     try {
@@ -32,57 +34,38 @@ export function MidiMonitor() {
   useEffect(() => () => disconnectRef.current?.(), []);
 
   return (
-    <section className="midi-card">
-      <div className="midi-header">
-        <div>
-          <span className="section-label">LIVE INPUT</span>
-          <h2>Electronic drums</h2>
-          <p>Connect a USB MIDI kit and inspect each hit before we plug it into the practice engine.</p>
+    <div className="midi-dock">
+      <button
+        className={`midi-pill ${connected ? 'connected' : ''}`}
+        type="button"
+        onClick={() => connected ? setExpanded((value) => !value) : void handleConnect()}
+        disabled={!supported || connecting}
+      >
+        <span className="midi-dot" />
+        <span>{connecting ? 'Connecting…' : connected ? devices[0]?.name ?? 'Drums connected' : 'Connect drums'}</span>
+      </button>
+
+      {connected && expanded && (
+        <div className="midi-popover">
+          <div className="midi-popover-head">
+            <div>
+              <span>LIVE MIDI</span>
+              <strong>{devices[0]?.name}</strong>
+            </div>
+            <button type="button" onClick={() => void handleConnect()}>Reconnect</button>
+          </div>
+          <div className="midi-readout">
+            <div><span>Instrument</span><strong>{lastHit?.instrument ?? 'Waiting for a hit'}</strong></div>
+            <div><span>Note</span><strong>{lastHit?.note ?? '—'}</strong></div>
+            <div><span>Velocity</span><strong>{lastHit?.velocity ?? '—'}</strong></div>
+            <div><span>Channel</span><strong>{lastHit?.channel ?? '—'}</strong></div>
+          </div>
+          <div className="velocity-meter"><div style={{ width: `${((lastHit?.velocity ?? 0) / 127) * 100}%` }} /></div>
         </div>
-
-        <button type="button" onClick={() => void handleConnect()} disabled={!supported || connecting}>
-          {connecting ? 'Connecting…' : devices.length > 0 ? 'Reconnect drums' : 'Connect drums'}
-        </button>
-      </div>
-
-      {!supported && (
-        <div className="midi-warning">Web MIDI is unavailable in this browser. Use Chrome or Edge on desktop.</div>
       )}
 
-      {error && <div className="midi-warning">{error}</div>}
-
-      <div className="midi-grid">
-        <div>
-          <span>Status</span>
-          <strong className={devices.length > 0 ? 'connected' : ''}>
-            {devices.length > 0 ? 'Connected' : 'Waiting'}
-          </strong>
-        </div>
-        <div>
-          <span>Device</span>
-          <strong>{devices[0]?.name ?? '—'}</strong>
-        </div>
-        <div>
-          <span>Instrument</span>
-          <strong>{lastHit?.instrument ?? '—'}</strong>
-        </div>
-        <div>
-          <span>Note</span>
-          <strong>{lastHit?.note ?? '—'}</strong>
-        </div>
-        <div>
-          <span>Velocity</span>
-          <strong>{lastHit?.velocity ?? '—'}</strong>
-        </div>
-        <div>
-          <span>Channel</span>
-          <strong>{lastHit?.channel ?? '—'}</strong>
-        </div>
-      </div>
-
-      <div className="velocity-meter" aria-label="MIDI velocity">
-        <div style={{ width: `${((lastHit?.velocity ?? 0) / 127) * 100}%` }} />
-      </div>
-    </section>
+      {!supported && <div className="midi-inline-warning">Web MIDI needs a supported desktop browser.</div>}
+      {error && <div className="midi-inline-warning">{error}</div>}
+    </div>
   );
 }
