@@ -1,3 +1,13 @@
+import type { DrumInstrument } from '../midi/midi';
+
+export type ExpectedHit = {
+  id: string;
+  beat: number;
+  measure: number;
+  midiNote: number | null;
+  instrument: DrumInstrument;
+};
+
 export type Measure = {
   number: number;
   startBeat: number;
@@ -10,6 +20,7 @@ export type Chart = {
   beatsPerMeasure: number;
   beatType: number;
   measures: Measure[];
+  expectedHits: ExpectedHit[];
   totalBeats: number;
 };
 
