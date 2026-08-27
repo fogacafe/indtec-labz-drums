@@ -37,10 +37,13 @@ button { cursor: pointer; }
 .control-copy span, .metronome-toggle span { display: block; color: #71808d; text-transform: uppercase; font-size: .66rem; letter-spacing: .12em; margin-bottom: 5px; }
 .control-copy strong, .metronome-toggle strong { font-size: .92rem; }
 .speed-options { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
-.speed-options button, .metronome-toggle { border: 1px solid #2b3742; background: #11171d; color: #aab5bf; border-radius: 10px; padding: 9px 11px; }
+.speed-options button, .metronome-toggle, .audio-test { border: 1px solid #2b3742; background: #11171d; color: #aab5bf; border-radius: 10px; padding: 9px 11px; }
 .speed-options button.active, .metronome-toggle.active { background: rgba(137, 240, 178, .12); border-color: rgba(137, 240, 178, .45); color: #a7f4c5; }
+.metronome-control { display: grid; grid-template-columns: minmax(132px, 1fr) auto; gap: 7px; align-items: stretch; }
 .metronome-toggle { min-width: 132px; text-align: left; transition: .18s ease; }
-.metronome-toggle:hover { transform: translateY(-1px); }
+.metronome-toggle:hover, .audio-test:hover { transform: translateY(-1px); }
+.audio-test { white-space: nowrap; }
+.metronome-control small { grid-column: 1 / -1; color: #66727d; font-size: .72rem; padding-left: 2px; }
 
 .transport { display: flex; align-items: center; gap: 10px; padding: 12px; margin-bottom: 14px; }
 .transport span { margin-left: auto; color: #8e9aa5; font-size: .9rem; }
@@ -81,6 +84,7 @@ button { cursor: pointer; }
   .speed-control { align-items: flex-start; flex-direction: column; }
   .speed-options { width: 100%; justify-content: flex-start; }
   .speed-options button { flex: 1; }
+  .metronome-control { grid-template-columns: 1fr auto; }
   .metronome-toggle { width: 100%; }
   .transport { flex-wrap: wrap; }
   .transport span { width: 100%; margin: 4px 0 0; }
