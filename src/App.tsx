@@ -58,21 +58,50 @@ export function App() {
   }
 
   async function ensureAudioContext() {
-    const AudioContextClass = window.AudioContext;
-    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
-    if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
-    return audioContextRef.current;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContext();
+
+    const context = audioContextRef.current;
+    if (context.state !== 'running') await context.resume();
+    return context;
+  }
+
+  function scheduleMetronomeClick(context: AudioContext, time: number, accent: boolean) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(accent ? 1500 : 950, time);
+    gain.gain.setValueAtTime(accent ? 0.32 : 0.2, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(time);
+    oscillator.stop(time + 0.065);
   }
 
   async function togglePlaying() {
     if (!chart) return;
-    if (!playing && metronomeEnabled) await ensureAudioContext();
+
+    if (!playing && metronomeEnabled) {
+      const context = await ensureAudioContext();
+      scheduleMetronomeClick(context, context.currentTime + 0.01, true);
+    }
+
     setPlaying((value) => !value);
   }
 
   async function toggleMetronome() {
-    if (!metronomeEnabled) await ensureAudioContext();
-    setMetronomeEnabled((value) => !value);
+    if (!metronomeEnabled) {
+      const context = await ensureAudioContext();
+      // The immediate click is intentional: Safari/iOS only reliably unlocks Web Audio
+      // when actual audio is produced from the user's gesture.
+      scheduleMetronomeClick(context, context.currentTime + 0.01, true);
+      setMetronomeEnabled(true);
+      return;
+    }
+
+    setMetronomeEnabled(false);
   }
 
   function selectMeasure(measure: number) {
@@ -124,34 +153,22 @@ export function App() {
     if (!playing || !metronomeEnabled || !chart) return;
 
     const context = audioContextRef.current;
-    if (!context) return;
+    if (!context || context.state !== 'running') return;
 
     const beatDurationSeconds = 60 / effectiveBpm;
-    const lookAheadSeconds = 0.1;
+    const lookAheadSeconds = 0.12;
     const schedulerIntervalMs = 25;
     const currentWholeBeat = Math.ceil(currentBeat - 0.0001);
     const fractionToNextBeat = Math.max(currentWholeBeat - currentBeat, 0);
     let nextBeat = currentWholeBeat;
-    let nextClickAt = context.currentTime + fractionToNextBeat * beatDurationSeconds;
-
-    const scheduleClick = (time: number, beat: number) => {
-      const accent = beat % chart.beatsPerMeasure === 0;
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-
-      oscillator.frequency.setValueAtTime(accent ? 1200 : 850, time);
-      gain.gain.setValueAtTime(accent ? 0.16 : 0.09, time);
-      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.045);
-
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start(time);
-      oscillator.stop(time + 0.05);
-    };
+    let nextClickAt = context.currentTime + Math.max(fractionToNextBeat * beatDurationSeconds, 0.03);
 
     const scheduler = window.setInterval(() => {
+      if (context.state !== 'running') return;
+
       while (nextClickAt < context.currentTime + lookAheadSeconds) {
-        scheduleClick(nextClickAt, nextBeat);
+        const accent = nextBeat % chart.beatsPerMeasure === 0;
+        scheduleMetronomeClick(context, nextClickAt, accent);
         nextBeat += 1;
         nextClickAt += beatDurationSeconds;
       }
@@ -159,6 +176,21 @@ export function App() {
 
     return () => window.clearInterval(scheduler);
   }, [playing, metronomeEnabled, chart, effectiveBpm]);
+
+  useEffect(() => {
+    const resumeAudio = () => {
+      const context = audioContextRef.current;
+      if (metronomeEnabled && context && context.state !== 'running') void context.resume();
+    };
+
+    document.addEventListener('visibilitychange', resumeAudio);
+    window.addEventListener('pageshow', resumeAudio);
+
+    return () => {
+      document.removeEventListener('visibilitychange', resumeAudio);
+      window.removeEventListener('pageshow', resumeAudio);
+    };
+  }, [metronomeEnabled]);
 
   return (
     <main className="shell">
