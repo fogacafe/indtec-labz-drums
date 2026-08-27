@@ -12,22 +12,39 @@ export function App() {
   const [currentBeat, setCurrentBeat] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingDemo, setLoadingDemo] = useState(false);
   const startedAtRef = useRef<number | null>(null);
 
   const beatDurationMs = useMemo(() => (chart ? 60_000 / chart.bpm : 500), [chart]);
 
+  function loadXmlContent(content: string) {
+    const nextChart = parseMusicXml(content);
+    setXml(content);
+    setChart(nextChart);
+    setCurrentBeat(0);
+    setLoop(null);
+    setPlaying(false);
+    setError(null);
+  }
+
   async function importXml(file: File) {
     try {
-      const content = await file.text();
-      const nextChart = parseMusicXml(content);
-      setXml(content);
-      setChart(nextChart);
-      setCurrentBeat(0);
-      setLoop(null);
-      setPlaying(false);
-      setError(null);
+      loadXmlContent(await file.text());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not import MusicXML.');
+    }
+  }
+
+  async function loadDemo() {
+    try {
+      setLoadingDemo(true);
+      const response = await fetch(`${import.meta.env.BASE_URL}demo-groove.musicxml`);
+      if (!response.ok) throw new Error('Could not load the demo groove.');
+      loadXmlContent(await response.text());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load the demo groove.');
+    } finally {
+      setLoadingDemo(false);
     }
   }
 
@@ -85,17 +102,22 @@ export function App() {
           <p>Import a drum score, connect an electronic kit over Web MIDI and rehearse selected measures directly in the browser.</p>
         </div>
 
-        <label className="import-button">
-          Import MusicXML
-          <input
-            type="file"
-            accept=".xml,.musicxml,application/vnd.recordare.musicxml+xml"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void importXml(file);
-            }}
-          />
-        </label>
+        <div className="hero-actions">
+          <button className="demo-button" type="button" onClick={() => void loadDemo()} disabled={loadingDemo}>
+            {loadingDemo ? 'Loading…' : 'Load demo'}
+          </button>
+          <label className="import-button">
+            Import MusicXML
+            <input
+              type="file"
+              accept=".xml,.musicxml,application/vnd.recordare.musicxml+xml"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importXml(file);
+              }}
+            />
+          </label>
+        </div>
       </header>
 
       {error && <div className="error">{error}</div>}
