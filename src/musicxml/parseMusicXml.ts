@@ -1,18 +1,19 @@
 import type { Chart, ExpectedHit, Measure } from '../domain/chart';
 import type { DrumInstrument } from '../midi/midi';
+import { instrumentFromMidiNote, musicXmlUnpitchedToMidi } from './percussionMap';
 
 const textOf = (parent: ParentNode, selector: string) => parent.querySelector(selector)?.textContent?.trim();
 
 const instrumentFromName = (name?: string): DrumInstrument => {
   const value = name?.toLowerCase() ?? '';
   if (value.includes('kick') || value.includes('bass drum')) return 'Kick';
-  if (value.includes('snare')) return 'Snare';
+  if (value.includes('snare') || value.includes('side stick')) return 'Snare';
   if (value.includes('closed') && value.includes('hat')) return 'Closed Hi-Hat';
   if (value.includes('open') && value.includes('hat')) return 'Open Hi-Hat';
   if (value.includes('high') && value.includes('tom')) return 'High Tom';
   if ((value.includes('mid') || value.includes('medium')) && value.includes('tom')) return 'Mid Tom';
   if ((value.includes('low') || value.includes('floor')) && value.includes('tom')) return 'Low Tom';
-  if (value.includes('crash')) return 'Crash';
+  if (value.includes('crash') || value.includes('china') || value.includes('splash')) return 'Crash';
   if (value.includes('ride')) return 'Ride';
   return 'Unknown';
 };
@@ -33,9 +34,18 @@ export function parseMusicXml(xml: string): Chart {
   document.querySelectorAll('score-part score-instrument').forEach((node) => {
     const id = node.getAttribute('id');
     if (!id) return;
+
     const name = textOf(node, 'instrument-name');
     const midiNode = document.querySelector(`midi-instrument[id="${id}"] midi-unpitched`);
-    instrumentInfo.set(id, { midiNote: midiNode ? Number(midiNode.textContent) : null, instrument: instrumentFromName(name) });
+    const rawMusicXmlMidi = midiNode ? Number(midiNode.textContent) : null;
+    const midiNote = musicXmlUnpitchedToMidi(rawMusicXmlMidi);
+    const byName = instrumentFromName(name);
+    const byMidi = instrumentFromMidiNote(midiNote);
+
+    instrumentInfo.set(id, {
+      midiNote,
+      instrument: byName !== 'Unknown' ? byName : byMidi,
+    });
   });
 
   const measureNodes = [...document.querySelectorAll('part:first-of-type > measure')];
