@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DrumKitFeedback } from './components/DrumKitFeedback';
 import { MidiMonitor } from './components/MidiMonitor';
 import { PracticeTimeline } from './components/PracticeTimeline';
 import { ScoreViewer } from './components/ScoreViewer';
 import type { Chart, PracticeLoop } from './domain/chart';
-import type { DrumHit } from './midi/midi';
+import type { DrumHit, DrumInstrument } from './midi/midi';
 import { parseMusicXml } from './musicxml/parseMusicXml';
 import { readMusicXmlFile } from './musicxml/readMusicXmlFile';
 
@@ -11,6 +12,7 @@ const SPEED_OPTIONS = [50, 60, 75, 90, 100];
 type AudioStatus = 'idle' | AudioContextState | 'unsupported' | 'error';
 type FeedbackKind = 'perfect' | 'good' | 'early' | 'late' | 'wrong';
 type Feedback = { kind: FeedbackKind; label: string; detail: string; id: number };
+type KitSignal = { played: DrumInstrument; expected: DrumInstrument | null; wrong: boolean; id: number };
 type SafariAudioNavigator = Navigator & { audioSession?: { type: string } };
 type SafariAudioWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
 
@@ -18,11 +20,11 @@ export function App() {
   const [xml, setXml] = useState<string | null>(null); const [chart, setChart] = useState<Chart | null>(null); const [loop, setLoop] = useState<PracticeLoop | null>(null);
   const [currentBeat, setCurrentBeat] = useState(0); const [playing, setPlaying] = useState(false); const [error, setError] = useState<string | null>(null); const [loadingDemo, setLoadingDemo] = useState(false);
   const [speedPercent, setSpeedPercent] = useState(100); const [metronomeEnabled, setMetronomeEnabled] = useState(false); const [replayEnabled, setReplayEnabled] = useState(false); const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
-  const [feedback, setFeedback] = useState<Feedback | null>(null); const [hits, setHits] = useState({ perfect: 0, good: 0, earlyLate: 0, wrong: 0 });
+  const [feedback, setFeedback] = useState<Feedback | null>(null); const [kitSignal, setKitSignal] = useState<KitSignal | null>(null); const [hits, setHits] = useState({ perfect: 0, good: 0, earlyLate: 0, wrong: 0 });
   const startedAtRef = useRef<number | null>(null); const audioContextRef = useRef<AudioContext | null>(null); const matchedHitsRef = useRef(new Set<string>()); const feedbackIdRef = useRef(0);
   const effectiveBpm = useMemo(() => (chart ? chart.bpm * (speedPercent / 100) : 120), [chart, speedPercent]); const beatDurationMs = useMemo(() => 60_000 / effectiveBpm, [effectiveBpm]); const beatInMeasure = chart ? Math.floor(currentBeat) % chart.beatsPerMeasure : 0;
 
-  function resetPerformance() { matchedHitsRef.current.clear(); setHits({ perfect: 0, good: 0, earlyLate: 0, wrong: 0 }); setFeedback(null); }
+  function resetPerformance() { matchedHitsRef.current.clear(); setHits({ perfect: 0, good: 0, earlyLate: 0, wrong: 0 }); setFeedback(null); setKitSignal(null); }
   function loadXml(content: string) { const nextChart = parseMusicXml(content); setXml(content); setChart(nextChart); setCurrentBeat(0); setLoop(null); setPlaying(false); setError(null); resetPerformance(); }
   async function importScore(file: File) { try { loadXml(await readMusicXmlFile(file)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import MusicXML.'); } }
   async function loadDemo() { setLoadingDemo(true); try { const response = await fetch(`${import.meta.env.BASE_URL}demo-groove.musicxml`); if (!response.ok) throw new Error('Could not load the demo groove.'); loadXml(await response.text()); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load demo.'); } finally { setLoadingDemo(false); } }
@@ -31,29 +33,46 @@ export function App() {
   function scheduleMetronomeClick(context: AudioContext, time: number, accent: boolean) { const oscillator = context.createOscillator(); const gain = context.createGain(); oscillator.type = 'square'; oscillator.frequency.setValueAtTime(accent ? 1700 : 1050, time); gain.gain.setValueAtTime(accent ? 0.5 : 0.3, time); gain.gain.exponentialRampToValueAtTime(0.001, time + 0.075); oscillator.connect(gain); gain.connect(context.destination); oscillator.start(time); oscillator.stop(time + 0.08); }
 
   function handleDrumHit(hit: DrumHit) {
-    if (!playing || !chart || startedAtRef.current === null) return;
-    const actualBeat = (performance.now() - startedAtRef.current) / beatDurationMs;
-    const candidates = chart.expectedHits.filter((expected) => !matchedHitsRef.current.has(expected.id) && Math.abs(expected.beat - actualBeat) <= 0.45);
-    const sameNote = candidates.filter((expected) => expected.midiNote === null || expected.midiNote === hit.note);
-    const target = (sameNote.length ? sameNote : candidates).sort((a, b) => Math.abs(a.beat - actualBeat) - Math.abs(b.beat - actualBeat))[0];
     feedbackIdRef.current += 1;
-    if (!target || (target.midiNote !== null && target.midiNote !== hit.note)) { setFeedback({ kind: 'wrong', label: 'WRONG', detail: hit.instrument, id: feedbackIdRef.current }); setHits((value) => ({ ...value, wrong: value.wrong + 1 })); return; }
+    const signalId = feedbackIdRef.current;
+
+    if (!playing || !chart || startedAtRef.current === null) {
+      setKitSignal({ played: hit.instrument, expected: null, wrong: false, id: signalId });
+      return;
+    }
+
+    const actualBeat = (performance.now() - startedAtRef.current) / beatDurationMs;
+    const candidates = chart.expectedHits
+      .filter((expected) => !matchedHitsRef.current.has(expected.id) && Math.abs(expected.beat - actualBeat) <= 0.45)
+      .sort((a, b) => Math.abs(a.beat - actualBeat) - Math.abs(b.beat - actualBeat));
+
+    const nearest = candidates[0];
+    const sameInstrument = candidates.filter((expected) => expected.instrument !== 'Unknown' && expected.instrument === hit.instrument);
+    const sameNote = candidates.filter((expected) => expected.midiNote !== null && expected.midiNote === hit.note);
+    const target = (sameInstrument.length ? sameInstrument : sameNote)[0];
+    const expectedInstrument = nearest?.instrument !== 'Unknown' ? nearest?.instrument ?? null : null;
+
+    if (!target) {
+      setKitSignal({ played: hit.instrument, expected: expectedInstrument, wrong: true, id: signalId });
+      setFeedback({ kind: 'wrong', label: 'WRONG', detail: expectedInstrument ? `${hit.instrument} → ${expectedInstrument}` : `${hit.instrument} · note ${hit.note}`, id: signalId });
+      setHits((value) => ({ ...value, wrong: value.wrong + 1 }));
+      return;
+    }
+
     matchedHitsRef.current.add(target.id);
     const deltaMs = (actualBeat - target.beat) * beatDurationMs; const abs = Math.abs(deltaMs);
+    setKitSignal({ played: hit.instrument, expected: target.instrument !== 'Unknown' ? target.instrument : hit.instrument, wrong: false, id: signalId });
     let kind: FeedbackKind; let label: string;
     if (abs <= 55) { kind = 'perfect'; label = 'PERFECT'; setHits((value) => ({ ...value, perfect: value.perfect + 1 })); }
     else if (abs <= 110) { kind = 'good'; label = 'GOOD'; setHits((value) => ({ ...value, good: value.good + 1 })); }
     else { kind = deltaMs < 0 ? 'early' : 'late'; label = deltaMs < 0 ? 'EARLY' : 'LATE'; setHits((value) => ({ ...value, earlyLate: value.earlyLate + 1 })); }
-    setFeedback({ kind, label, detail: `${target.instrument} · ${Math.round(Math.abs(deltaMs))}ms`, id: feedbackIdRef.current });
+    setFeedback({ kind, label, detail: `${target.instrument} · ${Math.round(Math.abs(deltaMs))}ms`, id: signalId });
   }
 
   function seekToBeat(beat: number) {
     if (!chart) return;
     const nextBeat = Math.min(Math.max(beat, 0), chart.totalBeats);
-    setCurrentBeat(nextBeat);
-    startedAtRef.current = performance.now() - nextBeat * beatDurationMs;
-    matchedHitsRef.current.clear();
-    setFeedback(null);
+    setCurrentBeat(nextBeat); startedAtRef.current = performance.now() - nextBeat * beatDurationMs; matchedHitsRef.current.clear(); setFeedback(null); setKitSignal(null);
   }
 
   async function togglePlaying() { if (!chart) return; if (!playing) { if (!loop && currentBeat >= chart.totalBeats - 0.001) { setCurrentBeat(0); startedAtRef.current = null; resetPerformance(); } if (metronomeEnabled) { try { await ensureAudioContext(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not start audio.'); } } } setPlaying((value) => !value); }
@@ -64,6 +83,7 @@ export function App() {
   useEffect(() => { if (!playing || !metronomeEnabled || !chart) return; const context = audioContextRef.current; if (!context || context.state !== 'running') return; const beatDurationSeconds = 60 / effectiveBpm; const currentWholeBeat = Math.ceil(currentBeat - 0.0001); let nextBeat = currentWholeBeat; let nextClickAt = context.currentTime + Math.max(Math.max(currentWholeBeat - currentBeat, 0) * beatDurationSeconds, 0.03); const scheduler = window.setInterval(() => { if (context.state !== 'running') return; while (nextClickAt < context.currentTime + 0.12) { scheduleMetronomeClick(context, nextClickAt, nextBeat % chart.beatsPerMeasure === 0); nextBeat += 1; nextClickAt += beatDurationSeconds; } }, 25); return () => window.clearInterval(scheduler); }, [playing, metronomeEnabled, chart, effectiveBpm]);
   useEffect(() => { const resumeAudio = () => { const context = audioContextRef.current; if (metronomeEnabled && context && context.state !== 'running') void context.resume().then(() => setAudioStatus(context.state)); }; document.addEventListener('visibilitychange', resumeAudio); window.addEventListener('pageshow', resumeAudio); return () => { document.removeEventListener('visibilitychange', resumeAudio); window.removeEventListener('pageshow', resumeAudio); }; }, [metronomeEnabled]);
   useEffect(() => { if (!feedback) return; const timeout = window.setTimeout(() => setFeedback(null), 650); return () => window.clearTimeout(timeout); }, [feedback]);
+  useEffect(() => { if (!kitSignal) return; const id = kitSignal.id; const timeout = window.setTimeout(() => setKitSignal((value) => value?.id === id ? null : value), 650); return () => window.clearTimeout(timeout); }, [kitSignal]);
 
   const judgedHits = hits.perfect + hits.good + hits.earlyLate + hits.wrong; const accuracy = judgedHits ? Math.round(((hits.perfect + hits.good) / judgedHits) * 100) : 0;
   return <main className="shell">
@@ -73,6 +93,7 @@ export function App() {
     <section className={`practice-stage ${playing ? 'is-playing' : ''} ${feedback ? `feedback-${feedback.kind}` : ''}`} style={{ '--beat-duration': `${beatDurationMs}ms` } as React.CSSProperties}>
       <div className="stage-glow" key={`${Math.floor(currentBeat)}-${playing}`} /><div className="stage-topline"><div className="tempo-readout"><span>TEMPO</span><strong>{chart ? Math.round(effectiveBpm) : '—'}</strong><small>BPM</small></div><div className="beat-dots">{Array.from({ length: chart?.beatsPerMeasure ?? 4 }, (_, index) => <i key={index} className={chart && index === beatInMeasure ? 'active' : ''} />)}</div><div className="loop-readout"><span>LOOP</span><strong>{loop ? `${loop.startMeasure}—${loop.endMeasure}` : replayEnabled ? 'Replay chart' : 'Full chart'}</strong></div></div>
       <div className="score-stage"><ScoreViewer xml={xml} currentBeat={currentBeat} totalBeats={chart?.totalBeats ?? 0} beatsPerMeasure={chart?.beatsPerMeasure ?? 4} playing={playing} onSeek={seekToBeat} />{feedback && <div key={feedback.id} className={`hit-feedback ${feedback.kind}`}><strong>{feedback.label}</strong><span>{feedback.detail}</span></div>}</div>
+      <DrumKitFeedback played={kitSignal?.played ?? null} expected={kitSignal?.expected ?? null} wrong={kitSignal?.wrong ?? false} />
       <div className="stage-status"><span className={playing ? 'live-dot active' : 'live-dot'} />{playing ? 'LISTENING TO YOUR KIT' : chart ? 'READY' : 'LOAD A SCORE'}</div>
     </section>
     <section className="control-deck"><div className="transport-main"><button className="restart-button" type="button" disabled={!chart} onClick={() => { setPlaying(false); setCurrentBeat(0); resetPerformance(); }}>↺</button><button className="play-button" type="button" disabled={!chart} onClick={() => void togglePlaying()}>{playing ? 'Ⅱ' : '▶'}<span>{playing ? 'Pause' : 'Play'}</span></button><button className={`metro-button ${metronomeEnabled ? 'active' : ''}`} type="button" onClick={() => void toggleMetronome()}><span>♩</span><div><small>METRONOME</small><strong>{metronomeEnabled ? 'ON' : 'OFF'}</strong></div></button><button className={`replay-button ${replayEnabled ? 'active' : ''}`} type="button" onClick={() => setReplayEnabled((value) => !value)}><span>↻</span><div><small>REPLAY</small><strong>{replayEnabled ? 'ON' : 'OFF'}</strong></div></button></div><div className="speed-strip"><span>PRACTICE SPEED</span><div>{SPEED_OPTIONS.map((speed) => <button key={speed} type="button" className={speedPercent === speed ? 'active' : ''} onClick={() => setSpeedPercent(speed)}>{speed}%</button>)}</div></div><div className="audio-state">Audio {audioStatus}</div></section>
