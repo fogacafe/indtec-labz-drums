@@ -7,15 +7,21 @@ type Props = {
   wrong: boolean;
 };
 
-const pieces: Array<{ instrument: DrumInstrument; label: string; className: string }> = [
-  { instrument: 'Crash', label: 'CR', className: 'crash' },
-  { instrument: 'Ride', label: 'RD', className: 'ride' },
-  { instrument: 'Closed Hi-Hat', label: 'HH', className: 'hihat' },
-  { instrument: 'High Tom', label: 'T1', className: 'tom-high' },
-  { instrument: 'Mid Tom', label: 'T2', className: 'tom-mid' },
-  { instrument: 'Snare', label: 'SN', className: 'snare' },
-  { instrument: 'Low Tom', label: 'FT', className: 'tom-low' },
-  { instrument: 'Kick', label: 'K', className: 'kick' },
+type Piece = {
+  instruments: DrumInstrument[];
+  label: string;
+  className: string;
+};
+
+const pieces: Piece[] = [
+  { instruments: ['Crash'], label: 'CR', className: 'crash' },
+  { instruments: ['Ride'], label: 'RD', className: 'ride' },
+  { instruments: ['Closed Hi-Hat', 'Open Hi-Hat'], label: 'HH', className: 'hihat' },
+  { instruments: ['High Tom'], label: 'T1', className: 'tom-high' },
+  { instruments: ['Mid Tom'], label: 'T2', className: 'tom-mid' },
+  { instruments: ['Snare'], label: 'SN', className: 'snare' },
+  { instruments: ['Low Tom'], label: 'FT', className: 'tom-low' },
+  { instruments: ['Kick'], label: 'K', className: 'kick' },
 ];
 
 export function DrumKitFeedback({ played, expected, wrong }: Props) {
@@ -27,15 +33,16 @@ export function DrumKitFeedback({ played, expected, wrong }: Props) {
       </div>
       <div className="mini-kit">
         {pieces.map((piece) => {
-          const isPlayed = played === piece.instrument;
-          const isExpected = expected === piece.instrument;
+          const isPlayed = played ? piece.instruments.includes(played) : false;
+          const isExpected = expected ? piece.instruments.includes(expected) : false;
+          const openHiHat = piece.className === 'hihat' && (played === 'Open Hi-Hat' || expected === 'Open Hi-Hat');
           return (
             <div
-              key={piece.instrument}
-              className={`kit-piece ${piece.className} ${isPlayed ? (wrong ? 'played-wrong' : 'played') : ''} ${isExpected ? 'expected' : ''}`}
-              title={piece.instrument}
+              key={piece.className}
+              className={`kit-piece ${piece.className} ${openHiHat ? 'open-hihat' : ''} ${isPlayed ? (wrong ? 'played-wrong' : 'played') : ''} ${isExpected ? 'expected' : ''}`}
+              title={piece.instruments.join(' / ')}
             >
-              <span>{piece.label}</span>
+              <span>{openHiHat ? 'HH◌' : piece.label}</span>
             </div>
           );
         })}
