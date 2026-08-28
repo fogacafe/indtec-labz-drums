@@ -1,4 +1,5 @@
 import type { DrumInstrument } from '../midi/midi';
+import './DrumKitFeedback.css';
 
 type Props = {
   played: DrumInstrument | null;
